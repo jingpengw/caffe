@@ -596,8 +596,8 @@ __global__ void MaxPoolNDForward(const int_tp n, const int_tp num_axes,
       }
 
       if (bottom_data[final_offset] > maxval) {
-        maxidx = final_offset;
-        maxval = bottom_data[maxidx];
+        maxval = bottom_data[final_offset];
+        maxidx = final_offset - offset;
       }
 
       incremented = false;
@@ -655,9 +655,9 @@ __global__ void MaxPoolNDBackward(const int_tp n, const int_tp num_axes,
       } else {
         d_start[i] =
             (d_idx[i] + pad[i] < kernel_size[i]) ?
-                0 : (d_idx[i] + pad[i] - kernel_size[i]) / stride[i] + 1;
-        d_end[i] = min((int_tpc) ((d_idx[i] + pad[i]) / stride[i] + 1),
-                       (int_tpc) (pooled_size[i]));
+                0 : (d_idx[i] + pad[i] - kernel_size[i]) / stride[i];
+        d_end[i] = min((int_tpc) ((d_idx[i] + pad[i]) / stride[i]),
+                       (int_tpc) (pooled_size[i] - 1));
       }
       num /= size[i];
       offset *= pooled_size[i];
