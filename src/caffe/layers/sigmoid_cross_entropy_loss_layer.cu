@@ -10,6 +10,52 @@
 
 namespace caffe {
 
+#ifdef USE_CUDA
+template<typename Dtype>
+__global__ void SigmoidCrossEntropyLossForwardGPU(
+                    const int_tp nthreads,
+                    const Dtype* input_data,
+                    const Dtype* target, Dtype* loss ) {
+    CUDA_KERNEL_LOOP(i, nthreads) {
+        loss[i] = -(input_data[i]*(target[i] - (input_data[i] >= 0)) -
+            log(1 + exp(input_data[i] - 2*input_data[i]*(input_data[i] >= 0))));
+    }
+}
+#endif  // USE_CUDA
+
+// Forward GPU
+template<typename Dtype>
+void SigmoidCrossEntropyLossLayer<Dtype>::Forward_gpu(
+    const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
+    // The forward pass computes the sigmoid outputs.
+    sigmoid_bottom_vec_[0] = bottom[0];
+    sigmoid_layer_->Forward(sigmoid_bottom_vec_, sigmoid_top_vec_);
+
+    if (this->device_->backend() == BACKEND_CUDA) {
+
+        const int_tp count = bottom[0]->count();
+        const int_tp num = bottom[0]->num();
+
+        // Stable version of loss computation from input data
+        const Dtype* input_data = bottom[0]->gpu_data();
+        const Dtype* target = bottom[1]->gpu_data();
+
+        // Since this memory is not used for anything until it is overwritten
+        // on the backward pass, we use it here to avoid having to allocate new
+        // GPU memory to accumulate intermediate results in the kernel.
+        Dtype* loss_data = bottom[0]->mutable_gpu_diff();
+
+        SigmoidCrossEntropyLossForwardGPU<Dtype> CUDA_KERNEL(
+                CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS)(
+            count, input_data, target, loss_data);
+        CUDA_POST_KERNEL_CHECK;
+
+        Dtype loss;
+        caffe_gpu_asum(count, loss_data, &loss);
+        top[0]->mutable_cpu_data()[0] = loss / num;
+    }
+}
+
 template<typename Dtype>
 void SigmoidCrossEntropyLossLayer<Dtype>::Backward_gpu(
     const vector<Blob<Dtype>*>& top, const vector<bool>& propagate_down,
@@ -54,6 +100,6 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Backward_gpu(
   }
 }
 
-INSTANTIATE_LAYER_GPU_BACKWARD(SigmoidCrossEntropyLossLayer);
+INSTANTIATE_LAYER_GPU_FUNCS(SigmoidCrossEntropyLossLayer);
 
 }  // namespace caffe
