@@ -22,6 +22,10 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Reshape(
   LossLayer<Dtype>::Reshape(bottom, top);
   CHECK_EQ(bottom[0]->count(), bottom[1]->count()) <<
       "SIGMOID_CROSS_ENTROPY_LOSS layer inputs must have the same count.";
+  if (bottom.size()==3) {
+      CHECK_EQ(bottom[0]->count(), bottom[2]->count()) <<
+          "SIGMOID_CROSS_ENTROPY_LOSS layer inputs must have the same count.";
+  }
   sigmoid_layer_->Reshape(sigmoid_bottom_vec_, sigmoid_top_vec_);
 }
 
@@ -38,9 +42,18 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Forward_cpu(
   const Dtype* input_data = bottom[0]->cpu_data();
   const Dtype* target = bottom[1]->cpu_data();
   Dtype loss = 0;
-  for (int_tp i = 0; i < count; ++i) {
-    loss -= input_data[i] * (target[i] - (input_data[i] >= 0)) -
-        log(1 + exp(input_data[i] - 2 * input_data[i] * (input_data[i] >= 0)));
+  if (bottom.size()<3) {
+      for (int_tp i = 0; i < count; ++i) {
+        loss -= input_data[i] * (target[i] - (input_data[i] >= 0)) -
+            log(1 + exp(input_data[i] - 2 * input_data[i] * (input_data[i] >= 0)));
+      }
+  } else {
+      // Cross-entropy loss.
+      const Dtype* mask = bottom[2]->cpu_data();
+      for (int_tp i = 0; i < count; ++i) {
+        loss -= mask[i]*(input_data[i] * (target[i] - (input_data[i] >= 0)) -
+            log(1 + exp(input_data[i] - 2 * input_data[i] * (input_data[i] >= 0))));
+      }
   }
   top[0]->mutable_cpu_data()[0] = loss / num;
 }
@@ -61,6 +74,10 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Backward_cpu(
     const Dtype* target = bottom[1]->cpu_data();
     Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
     caffe_sub(count, sigmoid_output_data, target, bottom_diff);
+    if (bottom.size()==3) {
+        const Dtype* mask = bottom[2]->cpu_data();
+        caffe_mul(count, bottom_diff, mask, bottom_diff);
+    }
     // Scale down gradient
     const Dtype loss_weight = top[0]->cpu_diff()[0];
     caffe_scal(count, loss_weight / num, bottom_diff);

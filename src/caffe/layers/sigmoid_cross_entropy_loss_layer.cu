@@ -21,6 +21,17 @@ __global__ void SigmoidCrossEntropyLossForwardGPU(
             log(1 + exp(input_data[i] - 2*input_data[i]*(input_data[i] >= 0))));
     }
 }
+template<typename Dtype>
+__global__ void SigmoidMaskedCrossEntropyLossForwardGPU(
+                    const int_tp nthreads,
+                    const Dtype* input_data,
+                    const Dtype* target,
+                    const Dtype* mask, Dtype* loss ) {
+    CUDA_KERNEL_LOOP(i, nthreads) {
+        loss[i] = -mask[i]*(input_data[i]*(target[i] - (input_data[i] >= 0)) -
+            log(1 + exp(input_data[i] - 2*input_data[i]*(input_data[i] >= 0))));
+    }
+}
 #endif  // USE_CUDA
 
 // Forward GPU
@@ -45,9 +56,16 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Forward_gpu(
         // GPU memory to accumulate intermediate results in the kernel.
         Dtype* loss_data = bottom[0]->mutable_gpu_diff();
 
-        SigmoidCrossEntropyLossForwardGPU<Dtype> CUDA_KERNEL(
-                CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS)(
-            count, input_data, target, loss_data);
+        if (bottom.size()<3) {
+            SigmoidCrossEntropyLossForwardGPU<Dtype> CUDA_KERNEL(
+                    CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS)(
+                count, input_data, target, loss_data);
+        } else {
+            const Dtype* mask = bottom[2]->gpu_data();
+            SigmoidMaskedCrossEntropyLossForwardGPU<Dtype> CUDA_KERNEL(
+                    CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS)(
+                count, input_data, target, mask, loss_data);
+        }
         CUDA_POST_KERNEL_CHECK;
 
         Dtype loss;
@@ -76,6 +94,11 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Backward_gpu(
       // First, compute the diff
       caffe_copy(count, sigmoid_output_data, bottom_diff);
       caffe_gpu_axpy(count, Dtype(-1), target, bottom_diff);
+      // Apply mask, if exists
+      if (bottom.size()==3) {
+          const Dtype* mask = bottom[2]->gpu_data();
+          caffe_gpu_mul(count, bottom_diff, mask, bottom_diff);
+      }
       // Scale down gradient
       const Dtype loss_weight = top[0]->cpu_diff()[0];
       caffe_gpu_scal(count, loss_weight / num, bottom_diff);

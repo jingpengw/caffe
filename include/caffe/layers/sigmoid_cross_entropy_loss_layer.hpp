@@ -54,6 +54,9 @@ class SigmoidCrossEntropyLossLayer : public LossLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
 
   virtual inline const char* type() const { return "SigmoidCrossEntropyLoss"; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return -1; }
+  virtual inline int_tp MinBottomBlobs() const { return 2; }
+  virtual inline int_tp MaxBottomBlobs() const { return 3; }
 
  protected:
   /// @copydoc SigmoidCrossEntropyLossLayer
