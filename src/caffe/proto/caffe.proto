@@ -209,7 +209,7 @@ message SolverParameter {
 
   // type of the solver
   optional string type = 40 [default = "SGD"];
-  
+
   // numerical stability for RMSProp, AdaGrad and AdaDelta and Adam
   optional float delta = 31 [default = 1e-8];
   // parameters for the Adam solver
@@ -225,7 +225,7 @@ message SolverParameter {
 
   // If false, don't save a snapshot after training finishes.
   optional bool snapshot_after_train = 28 [default = true];
-  
+
   // DEPRECATED: old solver enum types, use string instead
   enum SolverType {
     SGD = 0;
@@ -304,7 +304,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 147 (last added: recurrent_param)
+// LayerParameter next available layer-specific ID: 150 (last added: affinitize_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -343,7 +343,7 @@ message LayerParameter {
   // included/excluded.
   repeated NetStateRule include = 8;
   repeated NetStateRule exclude = 9;
-  
+
   // Parameters for Greentea
   optional int64 device = 95 [default = -1];
   // Parameters for Splitnet
@@ -408,6 +408,7 @@ message LayerParameter {
   optional WindowDataParameter window_data_param = 129;
   optional MergeCropParameter mergecrop_param = 147;
   optional AffinityParameter affinity_param = 148;
+  optional AffinitizeParameter affinitize_param = 149;
 }
 
 // Message that stores parameters used to apply transformation
@@ -468,14 +469,14 @@ message AccuracyParameter {
   // the top k scoring classes.  By default, only compare to the top scoring
   // class (i.e. argmax).
   optional uint64 top_k = 1 [default = 1];
-  
+
   // The "label" axis of the prediction blob, whose argmax corresponds to the
   // predicted label -- may be negative to index from the end (e.g., -1 for the
   // last axis).  For example, if axis == 1 and the predictions are
   // (N x C x H x W), the label blob is expected to contain N*H*W ground truth
   // labels with integer values in {0, 1, ..., C-1}.
   optional int64 axis = 2 [default = 1];
-  
+
   // If specified, ignore instances with the given label.
   optional int64 ignore_label = 3;
 }
@@ -497,7 +498,7 @@ message ConcatParameter {
   // same dimension for all the bottom blobs.
   // By default, ConcatLayer concatenates blobs along the "channels" axis (
   optional int64 axis = 2 [default = 1];
-  
+
   // DEPRECATED: alias for "axis" -- does not support negative indexing.
   optional uint64 concat_dim = 1 [default = 1];
 }
@@ -594,7 +595,7 @@ message ConvolutionParameter {
     FFT = 5;
   }
   optional Engine engine = 15 [default = DEFAULT];
-  
+
   // The axis to interpret as "channels" when performing convolution.
   // Preceding dimensions are treated as independent inputs;
   // succeeding dimensions are treated as "spatial".
@@ -682,7 +683,7 @@ message DummyDataParameter {
   // specified, the ith is applied to the ith top blob.
   repeated FillerParameter data_filler = 1;
   repeated BlobShape shape = 6;
-  
+
   // 4D dimensions -- deprecated.  Use "shape" instead.
   repeated uint64 num = 2;
   repeated uint64 channels = 3;
@@ -754,7 +755,7 @@ message HDF5DataParameter {
   optional string source = 1;
   // Specify the batch size.
   optional uint64 batch_size = 2;
-  
+
   // Specify whether to shuffle the data.
   // If shuffle == true, the ordering of the HDF5 files is shuffled,
   // and the ordering of data within any given HDF5 file is shuffl
@@ -817,7 +818,7 @@ message InnerProductParameter {
   optional bool bias_term = 2 [default = true]; // whether to have bias terms
   optional FillerParameter weight_filler = 3; // The filler for the weight
   optional FillerParameter bias_filler = 4; // The filler for the bias
-  
+
   // The first axis to be lumped into a single inner product computation;
   // all preceding axes are retained in the output.
   // May be negative to index from the end (e.g., -1 for the last axis).
@@ -1124,7 +1125,7 @@ message SliceParameter {
   // By default, SliceLayer concatenates blobs along the "channels" axis (1).
   optional int64 axis = 3 [default = 1];
   repeated uint64 slice_point = 2;
-  
+
   // DEPRECATED: alias for "axis" -- does not support negative indexing.
   optional uint64 slice_dim = 1 [default = 1];
 }
@@ -1137,7 +1138,7 @@ message SoftmaxParameter {
     CUDNN = 2;
   }
   optional Engine engine = 1 [default = DEFAULT];
-  
+
   // The axis along which to perform the softmax -- may be negative to i
   // from the end (e.g., -1 for the last axis).
   // Any other axes will be evaluated as independent softmaxes.
@@ -1426,9 +1427,14 @@ message MergeCropParameter {
     ADD = 1;
   }
   optional MergeOp operation = 1 [default = STACK];
-  
+
   // Forward and backward enable/disable
   // Defined once per bottom blob
   repeated bool forward = 2;
   repeated bool backward = 3;
+}
+
+message AffinitizeParameter {
+  optional int64 axis = 1 [default = 1];
+  repeated int64 dst = 2;  
 }
