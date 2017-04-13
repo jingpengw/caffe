@@ -260,14 +260,19 @@ class BilinearFiller : public Filler<Dtype> {
   explicit BilinearFiller(const FillerParameter& param)
       : Filler<Dtype>(param) {}
   virtual void Fill(Blob<Dtype>* blob) {
-    CHECK_EQ(blob->num_axes(), 4) << "Blob must be 4 dim.";
-    CHECK_EQ(blob->width(), blob->height()) << "Filter must be square";
+    // CHECK_EQ(blob->num_axes(), 4) << "Blob must be 4 dim.";
+    int_tp ndim = blob->num_axes();
+    int_tp w = ndim - 1;
+    int_tp h = ndim - 2;
+    int_tp d = ndim - 3;
+    CHECK_EQ(blob->shape(w), blob->shape(h)) << "Filter must be square";
+    CHECK_EQ(blob->shape(d), 1) << "Filter must be 2D";
     Dtype* data = blob->mutable_cpu_data();
-    int_tp f = ceil(blob->width() / 2.);
+    int_tp f = ceil(blob->shape(w) / 2.);
     float c = (2 * f - 1 - f % 2) / (2. * f);
     for (int_tp i = 0; i < blob->count(); ++i) {
-      float x = i % blob->width();
-      float y = (i / blob->width()) % blob->height();
+      float x = i % blob->shape(w);
+      float y = (i / blob->shape(w)) % blob->shape(h);
       data[i] = (1 - fabs(x / f - c)) * (1 - fabs(y / f - c));
     }
     CHECK_EQ(this->filler_param_.sparse(), -1)

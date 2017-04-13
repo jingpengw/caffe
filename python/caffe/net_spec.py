@@ -189,6 +189,8 @@ class NetSpec(object):
         return self.__getattr__(item)
 
     def to_proto(self):
+        # for k, v in six.iteritems(self.tops):
+        #     print k, v
         names = {v: (v.name if v.name != None else k) for k, v in six.iteritems(self.tops)}
         autonames = Counter()
         layers = OrderedDict()
