@@ -41,7 +41,7 @@ RUN pip install -r ${CAFFE_ROOT}/python/requirements.txt
 
 
 #RUN apt-get install -y --no-install-recommends libopencv-dev 
-
+RUN make clean
 RUN make -j "$(nproc)" all && \
     make -j "$(nproc)" pycaffe
 
