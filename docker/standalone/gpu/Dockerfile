@@ -19,17 +19,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsnappy-dev \
         protobuf-compiler \
         python-dev \
+        python-numpy \
         python-pip && \
     rm -rf /var/lib/apt/lists/*
 RUN pip install --upgrade pip
 RUN pip install -U setuptools 
-RUN pip install numpy scipy pydot 
+RUN pip install scipy pydot 
 
 # correct the library name
 WORKDIR /usr/lib/x86_64-linux-gnu
 RUN ln -s libhdf5_serial.so.8.0.2 libhdf5.so && \
     ln -s libhdf5_serial_hl.so.8.0.2 libhdf5_hl.so
 ENV CPATH /usr/include/hdf5/serial/
+
 
 # download and install caffe
 WORKDIR /opt 
@@ -41,9 +43,10 @@ RUN pip install -r ${CAFFE_ROOT}/python/requirements.txt
 
 
 #RUN apt-get install -y --no-install-recommends libopencv-dev 
+COPY Makefile.config ./  
 RUN make clean
-RUN make -j "$(nproc)" all && \
-    make -j "$(nproc)" pycaffe
+#RUN make -j "$(nproc)" all 
+RUN make -j "$(nproc)" pycaffe
 
 ENV PYCAFFE_ROOT $CAFFE_ROOT/python
 ENV PYTHONPATH $PYCAFFE_ROOT:$PYTHONPATH
