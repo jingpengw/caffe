@@ -1,4 +1,4 @@
-if(CPU_ONLY)
+if(CPU_ONLY OR NOT USE_CUDA)
   return()
 endif()
 
@@ -132,7 +132,7 @@ function(caffe_select_nvcc_arch_flags out_variable)
 endfunction()
 
 ################################################################################################
-# Short command for cuda comnpilation
+# Short command for cuda compilation
 # Usage:
 #   caffe_cuda_compile(<objlist_variable> <cuda_files>)
 macro(caffe_cuda_compile objlist_variable)
@@ -145,11 +145,11 @@ macro(caffe_cuda_compile objlist_variable)
   endforeach()
 
   if(UNIX OR APPLE)
-    list(APPEND CUDA_NVCC_FLAGS -Xcompiler -fPIC)
+    list(APPEND CUDA_NVCC_FLAGS -Xcompiler -fPIC -std=c++11)
   endif()
 
   if(APPLE)
-    list(APPEND CUDA_NVCC_FLAGS -Xcompiler -Wno-unused-function)
+    list(APPEND CUDA_NVCC_FLAGS -std=c++11 -Xcompiler -Wno-unused-function)
   endif()
 
   cuda_compile(cuda_objcs ${ARGN})
@@ -183,11 +183,40 @@ function(detect_cuDNN)
     set(HAVE_CUDNN  TRUE PARENT_SCOPE)
     set(CUDNN_FOUND TRUE PARENT_SCOPE)
 
+    file(READ ${CUDNN_INCLUDE}/cudnn.h CUDNN_VERSION_FILE_CONTENTS)
+
+    # cuDNN v3 and beyond
+    string(REGEX MATCH "define CUDNN_MAJOR * +([0-9]+)"
+           CUDNN_VERSION_MAJOR "${CUDNN_VERSION_FILE_CONTENTS}")
+    string(REGEX REPLACE "define CUDNN_MAJOR * +([0-9]+)" "\\1"
+           CUDNN_VERSION_MAJOR "${CUDNN_VERSION_MAJOR}")
+    string(REGEX MATCH "define CUDNN_MINOR * +([0-9]+)"
+           CUDNN_VERSION_MINOR "${CUDNN_VERSION_FILE_CONTENTS}")
+    string(REGEX REPLACE "define CUDNN_MINOR * +([0-9]+)" "\\1"
+           CUDNN_VERSION_MINOR "${CUDNN_VERSION_MINOR}")
+    string(REGEX MATCH "define CUDNN_PATCHLEVEL * +([0-9]+)"
+           CUDNN_VERSION_PATCH "${CUDNN_VERSION_FILE_CONTENTS}")
+    string(REGEX REPLACE "define CUDNN_PATCHLEVEL * +([0-9]+)" "\\1"
+           CUDNN_VERSION_PATCH "${CUDNN_VERSION_PATCH}")
+
+    if(NOT CUDNN_VERSION_MAJOR)
+      set(CUDNN_VERSION "???")
+    else()
+      set(CUDNN_VERSION "${CUDNN_VERSION_MAJOR}.${CUDNN_VERSION_MINOR}.${CUDNN_VERSION_PATCH}")
+    endif()
+
+    message(STATUS "Found cuDNN: ver. ${CUDNN_VERSION} found (include: ${CUDNN_INCLUDE}, library: ${CUDNN_LIBRARY})")
+
+    string(COMPARE LESS "${CUDNN_VERSION_MAJOR}" 3 cuDNNVersionIncompatible)
+    if(cuDNNVersionIncompatible)
+      message(FATAL_ERROR "cuDNN version >3 is required.")
+    endif()
+
+    set(CUDNN_VERSION "${CUDNN_VERSION}" PARENT_SCOPE)
     mark_as_advanced(CUDNN_INCLUDE CUDNN_LIBRARY CUDNN_ROOT)
-    message(STATUS "Found cuDNN (include: ${CUDNN_INCLUDE}, library: ${CUDNN_LIBRARY})")
+
   endif()
 endfunction()
-
 
 ################################################################################################
 ###  Non macro section
@@ -210,9 +239,10 @@ list(APPEND Caffe_LINKER_LIBS ${CUDA_CUDART_LIBRARY}
 if(USE_CUDNN)
   detect_cuDNN()
   if(HAVE_CUDNN)
-    add_definitions(-DUSE_CUDNN)
     include_directories(SYSTEM ${CUDNN_INCLUDE})
     list(APPEND Caffe_LINKER_LIBS ${CUDNN_LIBRARY})
+  else()
+    message(FATAL_ERROR "CuDNN requested, but not found.")
   endif()
 endif()
 

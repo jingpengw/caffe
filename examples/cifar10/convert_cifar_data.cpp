@@ -16,18 +16,19 @@
 
 #include "caffe/proto/caffe.pb.h"
 #include "caffe/util/db.hpp"
+#include "caffe/util/format.hpp"
 
 using caffe::Datum;
 using boost::scoped_ptr;
 using std::string;
 namespace db = caffe::db;
 
-const int kCIFARSize = 32;
-const int kCIFARImageNBytes = 3072;
-const int kCIFARBatchSize = 10000;
-const int kCIFARTrainBatches = 5;
+const int_tp kCIFARSize = 32;
+const int_tp kCIFARImageNBytes = 3072;
+const int_tp kCIFARBatchSize = 10000;
+const int_tp kCIFARTrainBatches = 5;
 
-void read_image(std::ifstream* file, int* label, char* buffer) {
+void read_image(std::ifstream* file, int_tp* label, char* buffer) {
   char label_char;
   file->read(&label_char, 1);
   *label = label_char;
@@ -41,7 +42,7 @@ void convert_dataset(const string& input_folder, const string& output_folder,
   train_db->Open(output_folder + "/cifar10_train_" + db_type, db::NEW);
   scoped_ptr<db::Transaction> txn(train_db->NewTransaction());
   // Data buffer
-  int label;
+  int_tp label;
   char str_buffer[kCIFARImageNBytes];
   Datum datum;
   datum.set_channels(3);
@@ -49,22 +50,21 @@ void convert_dataset(const string& input_folder, const string& output_folder,
   datum.set_width(kCIFARSize);
 
   LOG(INFO) << "Writing Training data";
-  for (int fileid = 0; fileid < kCIFARTrainBatches; ++fileid) {
+  for (int_tp fileid = 0; fileid < kCIFARTrainBatches; ++fileid) {
     // Open files
     LOG(INFO) << "Training Batch " << fileid + 1;
-    snprintf(str_buffer, kCIFARImageNBytes, "/data_batch_%d.bin", fileid + 1);
-    std::ifstream data_file((input_folder + str_buffer).c_str(),
+    string batchFileName = input_folder + "/data_batch_"
+      + caffe::format_int(fileid+1) + ".bin";
+    std::ifstream data_file(batchFileName.c_str(),
         std::ios::in | std::ios::binary);
     CHECK(data_file) << "Unable to open train file #" << fileid + 1;
-    for (int itemid = 0; itemid < kCIFARBatchSize; ++itemid) {
+    for (int_tp itemid = 0; itemid < kCIFARBatchSize; ++itemid) {
       read_image(&data_file, &label, str_buffer);
       datum.set_label(label);
       datum.set_data(str_buffer, kCIFARImageNBytes);
-      int length = snprintf(str_buffer, kCIFARImageNBytes, "%05d",
-          fileid * kCIFARBatchSize + itemid);
       string out;
       CHECK(datum.SerializeToString(&out));
-      txn->Put(string(str_buffer, length), out);
+      txn->Put(caffe::format_int(fileid * kCIFARBatchSize + itemid, 5), out);
     }
   }
   txn->Commit();
@@ -78,20 +78,21 @@ void convert_dataset(const string& input_folder, const string& output_folder,
   std::ifstream data_file((input_folder + "/test_batch.bin").c_str(),
       std::ios::in | std::ios::binary);
   CHECK(data_file) << "Unable to open test file.";
-  for (int itemid = 0; itemid < kCIFARBatchSize; ++itemid) {
+  for (int_tp itemid = 0; itemid < kCIFARBatchSize; ++itemid) {
     read_image(&data_file, &label, str_buffer);
     datum.set_label(label);
     datum.set_data(str_buffer, kCIFARImageNBytes);
-    int length = snprintf(str_buffer, kCIFARImageNBytes, "%05d", itemid);
     string out;
     CHECK(datum.SerializeToString(&out));
-    txn->Put(string(str_buffer, length), out);
+    txn->Put(caffe::format_int(itemid, 5), out);
   }
   txn->Commit();
   test_db->Close();
 }
 
 int main(int argc, char** argv) {
+  FLAGS_alsologtostderr = 1;
+
   if (argc != 4) {
     printf("This script converts the CIFAR dataset to the leveldb format used\n"
            "by caffe to perform classification.\n"

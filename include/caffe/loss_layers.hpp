@@ -1,12 +1,12 @@
 #ifndef CAFFE_LOSS_LAYERS_HPP_
 #define CAFFE_LOSS_LAYERS_HPP_
 
+#include <opencv2/imgproc/imgproc.hpp>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "caffe/blob.hpp"
-#include "caffe/common.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/neuron_layers.hpp"
 #include "caffe/proto/caffe.pb.h"
@@ -38,8 +38,12 @@ class AccuracyLayer : public Layer<Dtype> {
       const vector<Blob<Dtype>*>& top);
 
   virtual inline const char* type() const { return "Accuracy"; }
-  virtual inline int ExactNumBottomBlobs() const { return 2; }
-  virtual inline int ExactNumTopBlobs() const { return 1; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return 2; }
+
+  // If there are two top blobs, then the second blob will contain
+  // accuracies per class.
+  virtual inline int_tp MinTopBlobs() const { return 1; }
+  virtual inline int_tp MaxTopBlos() const { return 2; }
 
  protected:
   /**
@@ -73,19 +77,21 @@ class AccuracyLayer : public Layer<Dtype> {
   /// @brief Not implemented -- AccuracyLayer cannot be used as a loss.
   virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
-    for (int i = 0; i < propagate_down.size(); ++i) {
+    for (int_tp i = 0; i < propagate_down.size(); ++i) {
       if (propagate_down[i]) { NOT_IMPLEMENTED; }
     }
   }
 
-  int label_axis_, outer_num_, inner_num_;
+  int_tp label_axis_, outer_num_, inner_num_;
 
-  int top_k_;
+  int_tp top_k_;
 
   /// Whether to ignore instances with a certain label.
   bool has_ignore_label_;
   /// The label indicating that an instance should be ignored.
-  int ignore_label_;
+  int_tp ignore_label_;
+  /// Keeps counts of the number of samples per class.
+  Blob<Dtype> nums_buffer_;
 };
 
 /**
@@ -106,7 +112,7 @@ class LossLayer : public Layer<Dtype> {
   virtual void Reshape(
       const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top);
 
-  virtual inline int ExactNumBottomBlobs() const { return 2; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return 2; }
 
   /**
    * @brief For convenience and backwards compatibility, instruct the Net to
@@ -115,22 +121,22 @@ class LossLayer : public Layer<Dtype> {
    *        one in the prototxt, etc.).
    */
   virtual inline bool AutoTopBlobs() const { return true; }
-  virtual inline int ExactNumTopBlobs() const { return 1; }
+  virtual inline int_tp ExactNumTopBlobs() const { return 1; }
   /**
    * We usually cannot backpropagate to the labels; ignore force_backward for
    * these inputs.
    */
-  virtual inline bool AllowForceBackward(const int bottom_index) const {
+  virtual inline bool AllowForceBackward(const int_tp bottom_index) const {
     return bottom_index != 1;
   }
 };
 
 /**
  * @brief Computes the contrastive loss @f$
- *          E = \frac{1}{2N} \sum\limits_{n=1}^N \left(y\right) d +
- *              \left(1-y\right) \max \left(margin-d, 0\right)
+ *          E = \frac{1}{2N} \sum\limits_{n=1}^N \left(y\right) d^2 +
+ *              \left(1-y\right) \max \left(margin-d, 0\right)^2
  *          @f$ where @f$
- *          d = \left| \left| a_n - b_n \right| \right|_2^2 @f$. This can be
+ *          d = \left| \left| a_n - b_n \right| \right|_2 @f$. This can be
  *          used to train siamese networks.
  *
  * @param bottom input Blob vector (length 3)
@@ -143,10 +149,10 @@ class LossLayer : public Layer<Dtype> {
  * @param top output Blob vector (length 1)
  *   -# @f$ (1 \times 1 \times 1 \times 1) @f$
  *      the computed contrastive loss: @f$ E =
- *          \frac{1}{2N} \sum\limits_{n=1}^N \left(y\right) d +
- *          \left(1-y\right) \max \left(margin-d, 0\right)
+ *          \frac{1}{2N} \sum\limits_{n=1}^N \left(y\right) d^2 +
+ *          \left(1-y\right) \max \left(margin-d, 0\right)^2
  *          @f$ where @f$
- *          d = \left| \left| a_n - b_n \right| \right|_2^2 @f$.
+ *          d = \left| \left| a_n - b_n \right| \right|_2 @f$.
  * This can be used to train siamese networks.
  */
 template <typename Dtype>
@@ -157,13 +163,13 @@ class ContrastiveLossLayer : public LossLayer<Dtype> {
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
-  virtual inline int ExactNumBottomBlobs() const { return 3; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return 3; }
   virtual inline const char* type() const { return "ContrastiveLoss"; }
   /**
    * Unlike most loss layers, in the ContrastiveLossLayer we can backpropagate
    * to the first two inputs.
    */
-  virtual inline bool AllowForceBackward(const int bottom_index) const {
+  virtual inline bool AllowForceBackward(const int_tp bottom_index) const {
     return bottom_index != 2;
   }
 
@@ -249,9 +255,13 @@ class EuclideanLossLayer : public LossLayer<Dtype> {
    * Unlike most loss layers, in the EuclideanLossLayer we can backpropagate
    * to both inputs -- override to return true and always allow force_backward.
    */
-  virtual inline bool AllowForceBackward(const int bottom_index) const {
+  virtual inline bool AllowForceBackward(const int_tp bottom_index) const {
     return true;
   }
+
+  virtual inline int_tp ExactNumBottomBlobs() const { return -1; }
+  virtual inline int_tp MinBottomBlobs() const { return 2; }
+  virtual inline int_tp MaxBottomBlobs() const { return 3; }
 
  protected:
   /// @copydoc EuclideanLossLayer
@@ -433,9 +443,9 @@ class InfogainLossLayer : public LossLayer<Dtype> {
   // InfogainLossLayer takes 2-3 bottom Blobs; if there are 3 the third should
   // be the infogain matrix.  (Otherwise the infogain matrix is loaded from a
   // file specified by LayerParameter.)
-  virtual inline int ExactNumBottomBlobs() const { return -1; }
-  virtual inline int MinBottomBlobs() const { return 2; }
-  virtual inline int MaxBottomBlobs() const { return 3; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return -1; }
+  virtual inline int_tp MinBottomBlobs() const { return 2; }
+  virtual inline int_tp MaxBottomBlobs() const { return 3; }
 
   virtual inline const char* type() const { return "InfogainLoss"; }
 
@@ -600,10 +610,15 @@ class SigmoidCrossEntropyLossLayer : public LossLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
 
   virtual inline const char* type() const { return "SigmoidCrossEntropyLoss"; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return -1; }
+  virtual inline int_tp MinBottomBlobs() const { return 2; }
+  virtual inline int_tp MaxBottomBlobs() const { return 3; }
 
  protected:
   /// @copydoc SigmoidCrossEntropyLossLayer
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
   /**
@@ -701,12 +716,11 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
 
   virtual inline const char* type() const { return "SoftmaxWithLoss"; }
-  virtual inline int ExactNumTopBlobs() const { return -1; }
-  virtual inline int MinTopBlobs() const { return 1; }
-  virtual inline int MaxTopBlobs() const { return 2; }
+  virtual inline int_tp ExactNumTopBlobs() const { return -1; }
+  virtual inline int_tp MinTopBlobs() const { return 1; }
+  virtual inline int_tp MaxTopBlobs() const { return 2; }
 
  protected:
-  /// @copydoc SoftmaxWithLossLayer
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
   virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
@@ -743,6 +757,12 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
 
+  /// Read the normalization mode parameter and compute the normalizer based
+  /// on the blob size.  If normalization_mode is VALID, the count of valid
+  /// outputs will be read from valid_count, unless it is -1 in which case
+  /// all outputs are assumed to be valid.
+  virtual Dtype get_normalizer(
+      LossParameter_NormalizationMode normalization_mode, int valid_count);
 
   /// The internal SoftmaxLayer used to map predictions to a distribution.
   shared_ptr<Layer<Dtype> > softmax_layer_;
@@ -755,13 +775,58 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
   /// Whether to ignore instances with a certain label.
   bool has_ignore_label_;
   /// The label indicating that an instance should be ignored.
-  int ignore_label_;
-  /// Whether to normalize the loss by the total number of values present
-  /// (otherwise just by the batch size).
-  bool normalize_;
+  int_tp ignore_label_;
+  /// How to normalize the output loss.
+  LossParameter_NormalizationMode normalization_;
 
-  int softmax_axis_, outer_num_, inner_num_;
+  int_tp softmax_axis_, outer_num_, inner_num_;
 };
+
+
+template <typename Dtype>
+class MalisLossLayer : public LossLayer<Dtype> {
+ public:
+  explicit MalisLossLayer(const LayerParameter& param)
+      : LossLayer<Dtype>(param) {}
+  virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+
+  virtual inline const char* type() const { return "MalisLoss"; }
+  virtual inline int_tp ExactNumBottomBlobs() const { return -1; }
+  virtual inline int_tp MinBottomBlobs() const { return 3; }
+  virtual inline int_tp MaxBottomBlobs() const { return 4; }
+  virtual inline int_tp ExactNumTopBlobs() const { return -1; }
+  virtual inline int_tp MinTopBlobs() const { return 1; }
+  virtual inline int_tp MaxTopBlobs() const { return 2; }
+
+ protected:
+  virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+
+ private:
+  void Malis(const Dtype* conn_data, const int_tp conn_num_dims,
+             const int_tp* conn_dims,
+             const int_tp* nhood_data, const int_tp* nhood_dims,
+             const Dtype* seg_data,
+             const bool pos, Dtype* dloss_data, Dtype* loss_out,
+             Dtype *classerr_out, Dtype *rand_index_out);
+
+  int_tp nedges_;
+  int_tp conn_num_dims_;
+  std::vector<int_tp> conn_dims_;
+  std::vector<int_tp> nhood_data_;
+  std::vector<int_tp> nhood_dims_;
+
+  Blob<Dtype> affinity_pos_;
+  Blob<Dtype> affinity_neg_;
+  Blob<Dtype> dloss_pos_;
+  Blob<Dtype> dloss_neg_;
+};
+
 
 }  // namespace caffe
 

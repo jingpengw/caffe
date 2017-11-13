@@ -46,7 +46,7 @@ def main(argv):
     parser.add_argument(
         "--model_def",
         default=os.path.join(pycaffe_dir,
-                "../models/bvlc_reference_caffenet/deploy.prototxt.prototxt"),
+                "../models/bvlc_reference_caffenet/deploy.prototxt"),
         help="Model definition file."
     )
     parser.add_argument(
@@ -109,6 +109,8 @@ def main(argv):
 
     if args.gpu:
         caffe.set_mode_gpu()
+        caffe.set_devices((0,))
+        caffe.select_device(0, True)
         print("GPU mode")
     else:
         caffe.set_mode_cpu()

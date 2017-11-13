@@ -1,5 +1,4 @@
 #include <cmath>
-#include <cstring>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -7,7 +6,11 @@
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
 #include "caffe/filler.hpp"
-#include "caffe/vision_layers.hpp"
+#include "caffe/layers/softmax_layer.hpp"
+
+#ifdef USE_CUDNN
+#include "caffe/layers/cudnn_softmax_layer.hpp"
+#endif
 
 #include "caffe/test/test_caffe_main.hpp"
 #include "caffe/test/test_gradient_check_util.hpp"
@@ -44,21 +47,21 @@ TYPED_TEST(SoftmaxLayerTest, TestForward) {
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   // Test sum
-  for (int i = 0; i < this->blob_bottom_->num(); ++i) {
-    for (int k = 0; k < this->blob_bottom_->height(); ++k) {
-      for (int l = 0; l < this->blob_bottom_->width(); ++l) {
+  for (int_tp i = 0; i < this->blob_bottom_->num(); ++i) {
+    for (int_tp k = 0; k < this->blob_bottom_->height(); ++k) {
+      for (int_tp l = 0; l < this->blob_bottom_->width(); ++l) {
         Dtype sum = 0;
-        for (int j = 0; j < this->blob_top_->channels(); ++j) {
+        for (int_tp j = 0; j < this->blob_top_->channels(); ++j) {
           sum += this->blob_top_->data_at(i, j, k, l);
         }
         EXPECT_GE(sum, 0.999);
         EXPECT_LE(sum, 1.001);
         // Test exact values
         Dtype scale = 0;
-        for (int j = 0; j < this->blob_bottom_->channels(); ++j) {
+        for (int_tp j = 0; j < this->blob_bottom_->channels(); ++j) {
           scale += exp(this->blob_bottom_->data_at(i, j, k, l));
         }
-        for (int j = 0; j < this->blob_bottom_->channels(); ++j) {
+        for (int_tp j = 0; j < this->blob_bottom_->channels(); ++j) {
           EXPECT_GE(this->blob_top_->data_at(i, j, k, l) + 1e-4,
               exp(this->blob_bottom_->data_at(i, j, k, l)) / scale)
               << "debug: " << i << " " << j;
@@ -75,7 +78,7 @@ TYPED_TEST(SoftmaxLayerTest, TestGradient) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   SoftmaxLayer<Dtype> layer(layer_param);
-  GradientChecker<Dtype> checker(1e-2, 1e-3);
+  GradientChecker<Dtype> checker(1e-2, 1e-2);
   checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
       this->blob_top_vec_);
 }
@@ -104,32 +107,34 @@ class CuDNNSoftmaxLayerTest : public GPUDeviceTest<Dtype> {
 TYPED_TEST_CASE(CuDNNSoftmaxLayerTest, TestDtypes);
 
 TYPED_TEST(CuDNNSoftmaxLayerTest, TestForwardCuDNN) {
-  LayerParameter layer_param;
-  CuDNNSoftmaxLayer<TypeParam> layer(layer_param);
-  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
-  layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
-  // Test sum
-  for (int i = 0; i < this->blob_bottom_->num(); ++i) {
-    for (int k = 0; k < this->blob_bottom_->height(); ++k) {
-      for (int l = 0; l < this->blob_bottom_->width(); ++l) {
-        TypeParam sum = 0;
-        for (int j = 0; j < this->blob_top_->channels(); ++j) {
-          sum += this->blob_top_->data_at(i, j, k, l);
-        }
-        EXPECT_GE(sum, 0.999);
-        EXPECT_LE(sum, 1.001);
-        // Test exact values
-        TypeParam scale = 0;
-        for (int j = 0; j < this->blob_bottom_->channels(); ++j) {
-          scale += exp(this->blob_bottom_->data_at(i, j, k, l));
-        }
-        for (int j = 0; j < this->blob_bottom_->channels(); ++j) {
-          EXPECT_GE(this->blob_top_->data_at(i, j, k, l) + 1e-4,
-              exp(this->blob_bottom_->data_at(i, j, k, l)) / scale)
-              << "debug: " << i << " " << j;
-          EXPECT_LE(this->blob_top_->data_at(i, j, k, l) - 1e-4,
-              exp(this->blob_bottom_->data_at(i, j, k, l)) / scale)
-              << "debug: " << i << " " << j;
+  if (Caffe::GetDefaultDevice()->backend() == BACKEND_CUDA) {
+    LayerParameter layer_param;
+    CuDNNSoftmaxLayer<TypeParam> layer(layer_param);
+    layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+    layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+    // Test sum
+    for (int_tp i = 0; i < this->blob_bottom_->num(); ++i) {
+      for (int_tp k = 0; k < this->blob_bottom_->height(); ++k) {
+        for (int_tp l = 0; l < this->blob_bottom_->width(); ++l) {
+          TypeParam sum = 0;
+          for (int_tp j = 0; j < this->blob_top_->channels(); ++j) {
+            sum += this->blob_top_->data_at(i, j, k, l);
+          }
+          EXPECT_GE(sum, 0.999);
+          EXPECT_LE(sum, 1.001);
+          // Test exact values
+          TypeParam scale = 0;
+          for (int_tp j = 0; j < this->blob_bottom_->channels(); ++j) {
+            scale += exp(this->blob_bottom_->data_at(i, j, k, l));
+          }
+          for (int_tp j = 0; j < this->blob_bottom_->channels(); ++j) {
+            EXPECT_GE(this->blob_top_->data_at(i, j, k, l) + 1e-4,
+                exp(this->blob_bottom_->data_at(i, j, k, l)) / scale)
+                << "debug: " << i << " " << j;
+            EXPECT_LE(this->blob_top_->data_at(i, j, k, l) - 1e-4,
+                exp(this->blob_bottom_->data_at(i, j, k, l)) / scale)
+                << "debug: " << i << " " << j;
+          }
         }
       }
     }
@@ -137,11 +142,13 @@ TYPED_TEST(CuDNNSoftmaxLayerTest, TestForwardCuDNN) {
 }
 
 TYPED_TEST(CuDNNSoftmaxLayerTest, TestGradientCuDNN) {
-  LayerParameter layer_param;
-  CuDNNSoftmaxLayer<TypeParam> layer(layer_param);
-  GradientChecker<TypeParam> checker(1e-2, 1e-3);
-  checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
-      this->blob_top_vec_);
+  if (Caffe::GetDefaultDevice()->backend() == BACKEND_CUDA) {
+    LayerParameter layer_param;
+    CuDNNSoftmaxLayer<TypeParam> layer(layer_param);
+    GradientChecker<TypeParam> checker(1e-2, 1e-3);
+    checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+        this->blob_top_vec_);
+  }
 }
 
 #endif

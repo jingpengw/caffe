@@ -1,13 +1,17 @@
 #include <caffe/caffe.hpp>
+#ifdef USE_OPENCV
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#endif  // USE_OPENCV
+#include <algorithm>
 #include <iosfwd>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#ifdef USE_OPENCV
 using namespace caffe;  // NOLINT(build/namespaces)
 using std::string;
 
@@ -21,7 +25,7 @@ class Classifier {
              const string& mean_file,
              const string& label_file);
 
-  std::vector<Prediction> Classify(const cv::Mat& img, int N = 5);
+  std::vector<Prediction> Classify(const cv::Mat& img, int_tp N = 5);
 
  private:
   void SetMean(const string& mean_file);
@@ -36,23 +40,45 @@ class Classifier {
  private:
   shared_ptr<Net<float> > net_;
   cv::Size input_geometry_;
-  int num_channels_;
+  int_tp num_channels_;
   cv::Mat mean_;
   std::vector<string> labels_;
 };
+
+// Get all available GPU devices
+static void get_gpus(vector<int>* gpus) {
+    int count = 0;
+#ifndef CPU_ONLY
+    count = Caffe::EnumerateDevices(true);
+#else
+    NO_GPU;
+#endif
+    for (int i = 0; i < count; ++i) {
+      gpus->push_back(i);
+    }
+}
 
 Classifier::Classifier(const string& model_file,
                        const string& trained_file,
                        const string& mean_file,
                        const string& label_file) {
-#ifdef CPU_ONLY
-  Caffe::set_mode(Caffe::CPU);
-#else
-  Caffe::set_mode(Caffe::GPU);
-#endif
+  // Set device id and mode
+  vector<int> gpus;
+  get_gpus(&gpus);
+  if (gpus.size() != 0) {
+#ifndef CPU_ONLY
+    std::cout << "Use GPU with device ID " << gpus[0] << std::endl;
+    Caffe::SetDevices(gpus);
+    Caffe::set_mode(Caffe::GPU);
+    Caffe::SetDevice(gpus[0]);
+#endif  // !CPU_ONLY
+  } else {
+    std::cout << "Use CPU" << std::endl;
+    Caffe::set_mode(Caffe::CPU);
+  }
 
   /* Load the network. */
-  net_.reset(new Net<float>(model_file, TEST));
+  net_.reset(new Net<float>(model_file, TEST, Caffe::GetDefaultDevice()));
   net_->CopyTrainedLayersFrom(trained_file);
 
   CHECK_EQ(net_->num_inputs(), 1) << "Network should have exactly one input.";
@@ -79,32 +105,33 @@ Classifier::Classifier(const string& model_file,
     << "Number of labels is different from the output layer dimension.";
 }
 
-static bool PairCompare(const std::pair<float, int>& lhs,
-                        const std::pair<float, int>& rhs) {
+static bool PairCompare(const std::pair<float, int_tp>& lhs,
+                        const std::pair<float, int_tp>& rhs) {
   return lhs.first > rhs.first;
 }
 
 /* Return the indices of the top N values of vector v. */
-static std::vector<int> Argmax(const std::vector<float>& v, int N) {
-  std::vector<std::pair<float, int> > pairs;
-  for (size_t i = 0; i < v.size(); ++i)
+static std::vector<int_tp> Argmax(const std::vector<float>& v, int_tp N) {
+  std::vector<std::pair<float, int_tp> > pairs;
+  for (uint_tp i = 0; i < v.size(); ++i)
     pairs.push_back(std::make_pair(v[i], i));
   std::partial_sort(pairs.begin(), pairs.begin() + N, pairs.end(), PairCompare);
 
-  std::vector<int> result;
-  for (int i = 0; i < N; ++i)
+  std::vector<int_tp> result;
+  for (int_tp i = 0; i < N; ++i)
     result.push_back(pairs[i].second);
   return result;
 }
 
 /* Return the top N predictions. */
-std::vector<Prediction> Classifier::Classify(const cv::Mat& img, int N) {
+std::vector<Prediction> Classifier::Classify(const cv::Mat& img, int_tp N) {
   std::vector<float> output = Predict(img);
 
-  std::vector<int> maxN = Argmax(output, N);
+  N = std::min<int_tp>(labels_.size(), N);
+  std::vector<int_tp> maxN = Argmax(output, N);
   std::vector<Prediction> predictions;
-  for (int i = 0; i < N; ++i) {
-    int idx = maxN[i];
+  for (int_tp i = 0; i < N; ++i) {
+    int_tp idx = maxN[i];
     predictions.push_back(std::make_pair(labels_[idx], output[idx]));
   }
 
@@ -125,7 +152,7 @@ void Classifier::SetMean(const string& mean_file) {
   /* The format of the mean file is planar 32-bit float BGR or grayscale. */
   std::vector<cv::Mat> channels;
   float* data = mean_blob.mutable_cpu_data();
-  for (int i = 0; i < num_channels_; ++i) {
+  for (int_tp i = 0; i < num_channels_; ++i) {
     /* Extract an individual channel. */
     cv::Mat channel(mean_blob.height(), mean_blob.width(), CV_32FC1, data);
     channels.push_back(channel);
@@ -154,7 +181,7 @@ std::vector<float> Classifier::Predict(const cv::Mat& img) {
 
   Preprocess(img, &input_channels);
 
-  net_->ForwardPrefilled();
+  net_->Forward();
 
   /* Copy the output layer to a std::vector */
   Blob<float>* output_layer = net_->output_blobs()[0];
@@ -171,10 +198,10 @@ std::vector<float> Classifier::Predict(const cv::Mat& img) {
 void Classifier::WrapInputLayer(std::vector<cv::Mat>* input_channels) {
   Blob<float>* input_layer = net_->input_blobs()[0];
 
-  int width = input_layer->width();
-  int height = input_layer->height();
+  int_tp width = input_layer->width();
+  int_tp height = input_layer->height();
   float* input_data = input_layer->mutable_cpu_data();
-  for (int i = 0; i < input_layer->channels(); ++i) {
+  for (int_tp i = 0; i < input_layer->channels(); ++i) {
     cv::Mat channel(height, width, CV_32FC1, input_data);
     input_channels->push_back(channel);
     input_data += width * height;
@@ -186,13 +213,13 @@ void Classifier::Preprocess(const cv::Mat& img,
   /* Convert the input image to the input image format of the network. */
   cv::Mat sample;
   if (img.channels() == 3 && num_channels_ == 1)
-    cv::cvtColor(img, sample, CV_BGR2GRAY);
+    cv::cvtColor(img, sample, cv::COLOR_BGR2GRAY);
   else if (img.channels() == 4 && num_channels_ == 1)
-    cv::cvtColor(img, sample, CV_BGRA2GRAY);
+    cv::cvtColor(img, sample, cv::COLOR_BGRA2GRAY);
   else if (img.channels() == 4 && num_channels_ == 3)
-    cv::cvtColor(img, sample, CV_BGRA2BGR);
+    cv::cvtColor(img, sample, cv::COLOR_BGRA2BGR);
   else if (img.channels() == 1 && num_channels_ == 3)
-    cv::cvtColor(img, sample, CV_GRAY2BGR);
+    cv::cvtColor(img, sample, cv::COLOR_GRAY2BGR);
   else
     sample = img;
 
@@ -247,9 +274,14 @@ int main(int argc, char** argv) {
   std::vector<Prediction> predictions = classifier.Classify(img);
 
   /* Print the top N predictions. */
-  for (size_t i = 0; i < predictions.size(); ++i) {
+  for (uint_tp i = 0; i < predictions.size(); ++i) {
     Prediction p = predictions[i];
     std::cout << std::fixed << std::setprecision(4) << p.second << " - \""
               << p.first << "\"" << std::endl;
   }
 }
+#else
+int_tp main(int_tp argc, char** argv) {
+  LOG(FATAL) << "This example requires OpenCV; compile with USE_OPENCV.";
+}
+#endif  // USE_OPENCV

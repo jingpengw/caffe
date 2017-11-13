@@ -1,11 +1,10 @@
-#include <cmath>
-#include <cstring>
 #include <vector>
 
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
-#include "caffe/common_layers.hpp"
 #include "caffe/filler.hpp"
+#include "caffe/layers/mvn_layer.hpp"
+#include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 
 #include "caffe/test/test_caffe_main.hpp"
@@ -43,16 +42,16 @@ TYPED_TEST(MVNLayerTest, TestForward) {
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   // Test mean
-  int num = this->blob_bottom_->num();
-  int channels = this->blob_bottom_->channels();
-  int height = this->blob_bottom_->height();
-  int width = this->blob_bottom_->width();
+  int_tp num = this->blob_bottom_->num();
+  int_tp channels = this->blob_bottom_->channels();
+  int_tp height = this->blob_bottom_->height();
+  int_tp width = this->blob_bottom_->width();
 
-  for (int i = 0; i < num; ++i) {
-    for (int j = 0; j < channels; ++j) {
+  for (int_tp i = 0; i < num; ++i) {
+    for (int_tp j = 0; j < channels; ++j) {
       Dtype sum = 0, var = 0;
-      for (int k = 0; k < height; ++k) {
-        for (int l = 0; l < width; ++l) {
+      for (int_tp k = 0; k < height; ++k) {
+        for (int_tp l = 0; l < width; ++l) {
           Dtype data = this->blob_top_->data_at(i, j, k, l);
           sum += data;
           var += data * data;
@@ -73,21 +72,22 @@ TYPED_TEST(MVNLayerTest, TestForward) {
 TYPED_TEST(MVNLayerTest, TestForwardMeanOnly) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
-  layer_param.ParseFromString("mvn_param{normalize_variance: false}");
+  CHECK(google::protobuf::TextFormat::ParseFromString(
+      "mvn_param{normalize_variance: false}", &layer_param));
   MVNLayer<Dtype> layer(layer_param);
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   // Test mean
-  int num = this->blob_bottom_->num();
-  int channels = this->blob_bottom_->channels();
-  int height = this->blob_bottom_->height();
-  int width = this->blob_bottom_->width();
+  int_tp num = this->blob_bottom_->num();
+  int_tp channels = this->blob_bottom_->channels();
+  int_tp height = this->blob_bottom_->height();
+  int_tp width = this->blob_bottom_->width();
 
-  for (int i = 0; i < num; ++i) {
-    for (int j = 0; j < channels; ++j) {
+  for (int_tp i = 0; i < num; ++i) {
+    for (int_tp j = 0; j < channels; ++j) {
       Dtype sum = 0, var = 0;
-      for (int k = 0; k < height; ++k) {
-        for (int l = 0; l < width; ++l) {
+      for (int_tp k = 0; k < height; ++k) {
+        for (int_tp l = 0; l < width; ++l) {
           Dtype data = this->blob_top_->data_at(i, j, k, l);
           sum += data;
           var += data * data;
@@ -105,21 +105,22 @@ TYPED_TEST(MVNLayerTest, TestForwardMeanOnly) {
 TYPED_TEST(MVNLayerTest, TestForwardAcrossChannels) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
-  layer_param.ParseFromString("mvn_param{across_channels: true}");
+  CHECK(google::protobuf::TextFormat::ParseFromString(
+      "mvn_param{across_channels: true}", &layer_param));
   MVNLayer<Dtype> layer(layer_param);
   layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
   // Test mean
-  int num = this->blob_bottom_->num();
-  int channels = this->blob_bottom_->channels();
-  int height = this->blob_bottom_->height();
-  int width = this->blob_bottom_->width();
+  int_tp num = this->blob_bottom_->num();
+  int_tp channels = this->blob_bottom_->channels();
+  int_tp height = this->blob_bottom_->height();
+  int_tp width = this->blob_bottom_->width();
 
-  for (int i = 0; i < num; ++i) {
+  for (int_tp i = 0; i < num; ++i) {
     Dtype sum = 0, var = 0;
-    for (int j = 0; j < channels; ++j) {
-      for (int k = 0; k < height; ++k) {
-        for (int l = 0; l < width; ++l) {
+    for (int_tp j = 0; j < channels; ++j) {
+      for (int_tp k = 0; k < height; ++k) {
+        for (int_tp l = 0; l < width; ++l) {
           Dtype data = this->blob_top_->data_at(i, j, k, l);
           sum += data;
           var += data * data;
@@ -141,7 +142,7 @@ TYPED_TEST(MVNLayerTest, TestGradient) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   MVNLayer<Dtype> layer(layer_param);
-  GradientChecker<Dtype> checker(1e-2, 1e-3);
+  GradientChecker<Dtype> checker(1e-2, 1e-2);
   checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
       this->blob_top_vec_);
 }
@@ -149,7 +150,8 @@ TYPED_TEST(MVNLayerTest, TestGradient) {
 TYPED_TEST(MVNLayerTest, TestGradientMeanOnly) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
-  layer_param.ParseFromString("mvn_param{normalize_variance: false}");
+  CHECK(google::protobuf::TextFormat::ParseFromString(
+      "mvn_param{normalize_variance: false}", &layer_param));
   MVNLayer<Dtype> layer(layer_param);
   GradientChecker<Dtype> checker(1e-2, 1e-3);
   checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
@@ -159,7 +161,8 @@ TYPED_TEST(MVNLayerTest, TestGradientMeanOnly) {
 TYPED_TEST(MVNLayerTest, TestGradientAcrossChannels) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
-  layer_param.ParseFromString("mvn_param{across_channels: true}");
+  CHECK(google::protobuf::TextFormat::ParseFromString(
+      "mvn_param{across_channels: true}", &layer_param));
   MVNLayer<Dtype> layer(layer_param);
   GradientChecker<Dtype> checker(1e-2, 1e-3);
   checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,

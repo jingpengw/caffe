@@ -2,10 +2,12 @@
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/text_format.h>
+#ifdef USE_OPENCV
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/highgui/highgui_c.h>
 #include <opencv2/imgproc/imgproc.hpp>
+#endif  // USE_OPENCV
 #include <stdint.h>
 
 #include <algorithm>
@@ -17,7 +19,7 @@
 #include "caffe/proto/caffe.pb.h"
 #include "caffe/util/io.hpp"
 
-const int kProtoReadBytesLimit = INT_MAX;  // Max size of 2 GB minus 1 byte.
+const int_tp kProtoReadBytesLimit = INT_MAX;  // Max size of 2 GB minus 1 byte.
 
 namespace caffe {
 
@@ -30,7 +32,7 @@ using google::protobuf::io::CodedOutputStream;
 using google::protobuf::Message;
 
 bool ReadProtoFromTextFile(const char* filename, Message* proto) {
-  int fd = open(filename, O_RDONLY);
+  int_tp fd = open(filename, O_RDONLY);
   CHECK_NE(fd, -1) << "File not found: " << filename;
   FileInputStream* input = new FileInputStream(fd);
   bool success = google::protobuf::TextFormat::Parse(input, proto);
@@ -40,7 +42,7 @@ bool ReadProtoFromTextFile(const char* filename, Message* proto) {
 }
 
 void WriteProtoToTextFile(const Message& proto, const char* filename) {
-  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int_tp fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   FileOutputStream* output = new FileOutputStream(fd);
   CHECK(google::protobuf::TextFormat::Print(proto, output));
   delete output;
@@ -48,7 +50,7 @@ void WriteProtoToTextFile(const Message& proto, const char* filename) {
 }
 
 bool ReadProtoFromBinaryFile(const char* filename, Message* proto) {
-  int fd = open(filename, O_RDONLY);
+  int_tp fd = open(filename, O_RDONLY);
   CHECK_NE(fd, -1) << "File not found: " << filename;
   ZeroCopyInputStream* raw_input = new FileInputStream(fd);
   CodedInputStream* coded_input = new CodedInputStream(raw_input);
@@ -67,10 +69,11 @@ void WriteProtoToBinaryFile(const Message& proto, const char* filename) {
   CHECK(proto.SerializeToOstream(&output));
 }
 
+#ifdef USE_OPENCV
 cv::Mat ReadImageToCVMat(const string& filename,
-    const int height, const int width, const bool is_color) {
+    const int_tp height, const int_tp width, const bool is_color) {
   cv::Mat cv_img;
-  int cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
+  int_tp cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
     CV_LOAD_IMAGE_GRAYSCALE);
   cv::Mat cv_img_origin = cv::imread(filename, cv_read_flag);
   if (!cv_img_origin.data) {
@@ -86,7 +89,7 @@ cv::Mat ReadImageToCVMat(const string& filename,
 }
 
 cv::Mat ReadImageToCVMat(const string& filename,
-    const int height, const int width) {
+    const int_tp height, const int_tp width) {
   return ReadImageToCVMat(filename, height, width, true);
 }
 
@@ -98,10 +101,11 @@ cv::Mat ReadImageToCVMat(const string& filename,
 cv::Mat ReadImageToCVMat(const string& filename) {
   return ReadImageToCVMat(filename, 0, 0, true);
 }
+
 // Do the file extension and encoding match?
 static bool matchExt(const std::string & fn,
                      std::string en) {
-  size_t p = fn.rfind('.');
+  uint_tp p = fn.rfind('.');
   std::string ext = p != fn.npos ? fn.substr(p) : fn;
   std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
   std::transform(en.begin(), en.end(), en.begin(), ::tolower);
@@ -111,8 +115,9 @@ static bool matchExt(const std::string & fn,
     return true;
   return false;
 }
-bool ReadImageToDatum(const string& filename, const int label,
-    const int height, const int width, const bool is_color,
+
+bool ReadImageToDatum(const string& filename, const int_tp label,
+    const int_tp height, const int_tp width, const bool is_color,
     const std::string & encoding, Datum* datum) {
   cv::Mat cv_img = ReadImageToCVMat(filename, height, width, is_color);
   if (cv_img.data) {
@@ -135,8 +140,9 @@ bool ReadImageToDatum(const string& filename, const int label,
     return false;
   }
 }
+#endif  // USE_OPENCV
 
-bool ReadFileToDatum(const string& filename, const int label,
+bool ReadFileToDatum(const string& filename, const int_tp label,
     Datum* datum) {
   std::streampos size;
 
@@ -156,6 +162,7 @@ bool ReadFileToDatum(const string& filename, const int label,
   }
 }
 
+#ifdef USE_OPENCV
 cv::Mat DecodeDatumToCVMatNative(const Datum& datum) {
   cv::Mat cv_img;
   CHECK(datum.encoded()) << "Datum not encoded";
@@ -172,7 +179,7 @@ cv::Mat DecodeDatumToCVMat(const Datum& datum, bool is_color) {
   CHECK(datum.encoded()) << "Datum not encoded";
   const string& data = datum.data();
   std::vector<char> vec_data(data.c_str(), data.c_str() + data.size());
-  int cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
+  int_tp cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
     CV_LOAD_IMAGE_GRAYSCALE);
   cv_img = cv::imdecode(vec_data, cv_read_flag);
   if (!cv_img.data) {
@@ -210,97 +217,22 @@ void CVMatToDatum(const cv::Mat& cv_img, Datum* datum) {
   datum->clear_data();
   datum->clear_float_data();
   datum->set_encoded(false);
-  int datum_channels = datum->channels();
-  int datum_height = datum->height();
-  int datum_width = datum->width();
-  int datum_size = datum_channels * datum_height * datum_width;
+  int_tp datum_channels = datum->channels();
+  int_tp datum_height = datum->height();
+  int_tp datum_width = datum->width();
+  int_tp datum_size = datum_channels * datum_height * datum_width;
   std::string buffer(datum_size, ' ');
-  for (int h = 0; h < datum_height; ++h) {
+  for (int_tp h = 0; h < datum_height; ++h) {
     const uchar* ptr = cv_img.ptr<uchar>(h);
-    int img_index = 0;
-    for (int w = 0; w < datum_width; ++w) {
-      for (int c = 0; c < datum_channels; ++c) {
-        int datum_index = (c * datum_height + h) * datum_width + w;
+    int_tp img_index = 0;
+    for (int_tp w = 0; w < datum_width; ++w) {
+      for (int_tp c = 0; c < datum_channels; ++c) {
+        int_tp datum_index = (c * datum_height + h) * datum_width + w;
         buffer[datum_index] = static_cast<char>(ptr[img_index++]);
       }
     }
   }
   datum->set_data(buffer);
 }
-
-// Verifies format of data stored in HDF5 file and reshapes blob accordingly.
-template <typename Dtype>
-void hdf5_load_nd_dataset_helper(
-    hid_t file_id, const char* dataset_name_, int min_dim, int max_dim,
-    Blob<Dtype>* blob) {
-  // Verify that the dataset exists.
-  CHECK(H5LTfind_dataset(file_id, dataset_name_))
-      << "Failed to find HDF5 dataset " << dataset_name_;
-  // Verify that the number of dimensions is in the accepted range.
-  herr_t status;
-  int ndims;
-  status = H5LTget_dataset_ndims(file_id, dataset_name_, &ndims);
-  CHECK_GE(status, 0) << "Failed to get dataset ndims for " << dataset_name_;
-  CHECK_GE(ndims, min_dim);
-  CHECK_LE(ndims, max_dim);
-
-  // Verify that the data format is what we expect: float or double.
-  std::vector<hsize_t> dims(ndims);
-  H5T_class_t class_;
-  status = H5LTget_dataset_info(
-      file_id, dataset_name_, dims.data(), &class_, NULL);
-  CHECK_GE(status, 0) << "Failed to get dataset info for " << dataset_name_;
-  CHECK_EQ(class_, H5T_FLOAT) << "Expected float or double data";
-
-  vector<int> blob_dims(dims.size());
-  for (int i = 0; i < dims.size(); ++i) {
-    blob_dims[i] = dims[i];
-  }
-  blob->Reshape(blob_dims);
-}
-
-template <>
-void hdf5_load_nd_dataset<float>(hid_t file_id, const char* dataset_name_,
-        int min_dim, int max_dim, Blob<float>* blob) {
-  hdf5_load_nd_dataset_helper(file_id, dataset_name_, min_dim, max_dim, blob);
-  herr_t status = H5LTread_dataset_float(
-    file_id, dataset_name_, blob->mutable_cpu_data());
-  CHECK_GE(status, 0) << "Failed to read float dataset " << dataset_name_;
-}
-
-template <>
-void hdf5_load_nd_dataset<double>(hid_t file_id, const char* dataset_name_,
-        int min_dim, int max_dim, Blob<double>* blob) {
-  hdf5_load_nd_dataset_helper(file_id, dataset_name_, min_dim, max_dim, blob);
-  herr_t status = H5LTread_dataset_double(
-    file_id, dataset_name_, blob->mutable_cpu_data());
-  CHECK_GE(status, 0) << "Failed to read double dataset " << dataset_name_;
-}
-
-template <>
-void hdf5_save_nd_dataset<float>(
-    const hid_t file_id, const string& dataset_name, const Blob<float>& blob) {
-  hsize_t dims[HDF5_NUM_DIMS];
-  dims[0] = blob.num();
-  dims[1] = blob.channels();
-  dims[2] = blob.height();
-  dims[3] = blob.width();
-  herr_t status = H5LTmake_dataset_float(
-      file_id, dataset_name.c_str(), HDF5_NUM_DIMS, dims, blob.cpu_data());
-  CHECK_GE(status, 0) << "Failed to make float dataset " << dataset_name;
-}
-
-template <>
-void hdf5_save_nd_dataset<double>(
-    const hid_t file_id, const string& dataset_name, const Blob<double>& blob) {
-  hsize_t dims[HDF5_NUM_DIMS];
-  dims[0] = blob.num();
-  dims[1] = blob.channels();
-  dims[2] = blob.height();
-  dims[3] = blob.width();
-  herr_t status = H5LTmake_dataset_double(
-      file_id, dataset_name.c_str(), HDF5_NUM_DIMS, dims, blob.cpu_data());
-  CHECK_GE(status, 0) << "Failed to make double dataset " << dataset_name;
-}
-
+#endif  // USE_OPENCV
 }  // namespace caffe

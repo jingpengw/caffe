@@ -13,11 +13,13 @@ namespace caffe {
  * @brief Applies common transformations to the input data, such as
  * scaling, mirroring, substracting the image mean...
  */
-template <typename Dtype>
+template<typename Dtype>
 class DataTransformer {
  public:
-  explicit DataTransformer(const TransformationParameter& param, Phase phase);
-  virtual ~DataTransformer() {}
+  explicit DataTransformer(const TransformationParameter& param, Phase phase,
+                           device *device_context);
+  virtual ~DataTransformer() {
+  }
 
   /**
    * @brief Initialize the Random number generations if needed by the
@@ -48,8 +50,9 @@ class DataTransformer {
    *    set_cpu_data() is used. See memory_layer.cpp for an example.
    */
   void Transform(const vector<Datum> & datum_vector,
-                Blob<Dtype>* transformed_blob);
+                 Blob<Dtype>* transformed_blob);
 
+#ifdef USE_OPENCV
   /**
    * @brief Applies the transformation defined in the data layer's
    * transform_param block to a vector of Mat.
@@ -61,7 +64,7 @@ class DataTransformer {
    *    set_cpu_data() is used. See memory_layer.cpp for an example.
    */
   void Transform(const vector<cv::Mat> & mat_vector,
-                Blob<Dtype>* transformed_blob);
+                 Blob<Dtype>* transformed_blob);
 
   /**
    * @brief Applies the transformation defined in the data layer's
@@ -74,6 +77,7 @@ class DataTransformer {
    *    set_cpu_data() is used. See image_data_layer.cpp for an example.
    */
   void Transform(const cv::Mat& cv_img, Blob<Dtype>* transformed_blob);
+#endif  // USE_OPENCV
 
   /**
    * @brief Applies the same transformation defined in the data layer's
@@ -95,7 +99,7 @@ class DataTransformer {
    * @param datum
    *    Datum containing the data to be transformed.
    */
-  vector<int> InferBlobShape(const Datum& datum);
+  vector<int_tp> InferBlobShape(const Datum& datum);
   /**
    * @brief Infers the shape of transformed_blob will have when
    *    the transformation is applied to the data.
@@ -104,7 +108,7 @@ class DataTransformer {
    * @param datum_vector
    *    A vector of Datum containing the data to be transformed.
    */
-  vector<int> InferBlobShape(const vector<Datum> & datum_vector);
+  vector<int_tp> InferBlobShape(const vector<Datum> & datum_vector);
   /**
    * @brief Infers the shape of transformed_blob will have when
    *    the transformation is applied to the data.
@@ -113,7 +117,8 @@ class DataTransformer {
    * @param mat_vector
    *    A vector of Mat containing the data to be transformed.
    */
-  vector<int> InferBlobShape(const vector<cv::Mat> & mat_vector);
+#ifdef USE_OPENCV
+  vector<int_tp> InferBlobShape(const vector<cv::Mat> & mat_vector);
   /**
    * @brief Infers the shape of transformed_blob will have when
    *    the transformation is applied to the data.
@@ -121,10 +126,11 @@ class DataTransformer {
    * @param cv_img
    *    cv::Mat containing the data to be transformed.
    */
-  vector<int> InferBlobShape(const cv::Mat& cv_img);
+  vector<int_tp> InferBlobShape(const cv::Mat& cv_img);
+#endif  // USE_OPENCV
 
  protected:
-   /**
+  /**
    * @brief Generates a random integer from Uniform({0, 1, ..., n-1}).
    *
    * @param n
@@ -132,20 +138,19 @@ class DataTransformer {
    * @return
    *    A uniformly random integer value from ({0, 1, ..., n-1}).
    */
-  virtual int Rand(int n);
+  virtual int_tp Rand(int_tp n);
 
   void Transform(const Datum& datum, Dtype* transformed_data);
   // Tranformation parameters
   TransformationParameter param_;
 
-
   shared_ptr<Caffe::RNG> rng_;
   Phase phase_;
   Blob<Dtype> data_mean_;
   vector<Dtype> mean_values_;
+  device *device_;
 };
 
 }  // namespace caffe
 
 #endif  // CAFFE_DATA_TRANSFORMER_HPP_
-

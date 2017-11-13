@@ -1,6 +1,4 @@
 #include <cfloat>
-#include <cmath>
-#include <cstring>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -8,8 +6,8 @@
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
 #include "caffe/filler.hpp"
+#include "caffe/layers/accuracy_layer.hpp"
 #include "caffe/util/rng.hpp"
-#include "caffe/vision_layers.hpp"
 
 #include "caffe/test/test_caffe_main.hpp"
 
@@ -22,8 +20,9 @@ class AccuracyLayerTest : public CPUDeviceTest<Dtype> {
       : blob_bottom_data_(new Blob<Dtype>()),
         blob_bottom_label_(new Blob<Dtype>()),
         blob_top_(new Blob<Dtype>()),
+        blob_top_per_class_(new Blob<Dtype>()),
         top_k_(3) {
-    vector<int> shape(2);
+    vector<int_tp> shape(2);
     shape[0] = 100;
     shape[1] = 10;
     blob_bottom_data_->Reshape(shape);
@@ -34,6 +33,8 @@ class AccuracyLayerTest : public CPUDeviceTest<Dtype> {
     blob_bottom_vec_.push_back(blob_bottom_data_);
     blob_bottom_vec_.push_back(blob_bottom_label_);
     blob_top_vec_.push_back(blob_top_);
+    blob_top_per_class_vec_.push_back(blob_top_);
+    blob_top_per_class_vec_.push_back(blob_top_per_class_);
   }
 
   virtual void FillBottoms() {
@@ -42,12 +43,12 @@ class AccuracyLayerTest : public CPUDeviceTest<Dtype> {
     GaussianFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_data_);
 
-    const unsigned int prefetch_rng_seed = caffe_rng_rand();
+    const uint_tp prefetch_rng_seed = caffe_rng_rand();
     shared_ptr<Caffe::RNG> rng(new Caffe::RNG(prefetch_rng_seed));
     caffe::rng_t* prefetch_rng =
           static_cast<caffe::rng_t*>(rng->generator());
     Dtype* label_data = blob_bottom_label_->mutable_cpu_data();
-    for (int i = 0; i < blob_bottom_label_->count(); ++i) {
+    for (int_tp i = 0; i < blob_bottom_label_->count(); ++i) {
       label_data[i] = (*prefetch_rng)() % 10;
     }
   }
@@ -56,13 +57,16 @@ class AccuracyLayerTest : public CPUDeviceTest<Dtype> {
     delete blob_bottom_data_;
     delete blob_bottom_label_;
     delete blob_top_;
+    delete blob_top_per_class_;
   }
   Blob<Dtype>* const blob_bottom_data_;
   Blob<Dtype>* const blob_bottom_label_;
   Blob<Dtype>* const blob_top_;
+  Blob<Dtype>* const blob_top_per_class_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
-  int top_k_;
+  vector<Blob<Dtype>*> blob_top_per_class_vec_;
+  int_tp top_k_;
 };
 
 TYPED_TEST_CASE(AccuracyLayerTest, TestDtypes);
@@ -90,6 +94,20 @@ TYPED_TEST(AccuracyLayerTest, TestSetupTopK) {
   EXPECT_EQ(this->blob_top_->width(), 1);
 }
 
+TYPED_TEST(AccuracyLayerTest, TestSetupOutputPerClass) {
+  LayerParameter layer_param;
+  AccuracyLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_per_class_vec_);
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 1);
+  EXPECT_EQ(this->blob_top_->width(), 1);
+  EXPECT_EQ(this->blob_top_per_class_->num(), 10);
+  EXPECT_EQ(this->blob_top_per_class_->channels(), 1);
+  EXPECT_EQ(this->blob_top_per_class_->height(), 1);
+  EXPECT_EQ(this->blob_top_per_class_->width(), 1);
+}
+
 TYPED_TEST(AccuracyLayerTest, TestForwardCPU) {
   LayerParameter layer_param;
   AccuracyLayer<TypeParam> layer(layer_param);
@@ -97,12 +115,12 @@ TYPED_TEST(AccuracyLayerTest, TestForwardCPU) {
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
   TypeParam max_value;
-  int max_id;
-  int num_correct_labels = 0;
-  for (int i = 0; i < 100; ++i) {
+  int_tp max_id;
+  int_tp num_correct_labels = 0;
+  for (int_tp i = 0; i < 100; ++i) {
     max_value = -FLT_MAX;
     max_id = 0;
-    for (int j = 0; j < 10; ++j) {
+    for (int_tp j = 0; j < 10; ++j) {
       if (this->blob_bottom_data_->data_at(i, j, 0, 0) > max_value) {
         max_value = this->blob_bottom_data_->data_at(i, j, 0, 0);
         max_id = j;
@@ -118,7 +136,7 @@ TYPED_TEST(AccuracyLayerTest, TestForwardCPU) {
 
 TYPED_TEST(AccuracyLayerTest, TestForwardWithSpatialAxes) {
   this->blob_bottom_data_->Reshape(2, 10, 4, 5);
-  vector<int> label_shape(3);
+  vector<int_tp> label_shape(3);
   label_shape[0] = 2; label_shape[1] = 4; label_shape[2] = 5;
   this->blob_bottom_label_->Reshape(label_shape);
   this->FillBottoms();
@@ -129,16 +147,16 @@ TYPED_TEST(AccuracyLayerTest, TestForwardWithSpatialAxes) {
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
   TypeParam max_value;
-  const int num_labels = this->blob_bottom_label_->count();
-  int max_id;
-  int num_correct_labels = 0;
-  vector<int> label_offset(3);
-  for (int n = 0; n < this->blob_bottom_data_->num(); ++n) {
-    for (int h = 0; h < this->blob_bottom_data_->height(); ++h) {
-      for (int w = 0; w < this->blob_bottom_data_->width(); ++w) {
+  const int_tp num_labels = this->blob_bottom_label_->count();
+  int_tp max_id;
+  int_tp num_correct_labels = 0;
+  vector<int_tp> label_offset(3);
+  for (int_tp n = 0; n < this->blob_bottom_data_->num(); ++n) {
+    for (int_tp h = 0; h < this->blob_bottom_data_->height(); ++h) {
+      for (int_tp w = 0; w < this->blob_bottom_data_->width(); ++w) {
         max_value = -FLT_MAX;
         max_id = 0;
-        for (int c = 0; c < this->blob_bottom_data_->channels(); ++c) {
+        for (int_tp c = 0; c < this->blob_bottom_data_->channels(); ++c) {
           const TypeParam pred_value =
               this->blob_bottom_data_->data_at(n, c, h, w);
           if (pred_value > max_value) {
@@ -147,8 +165,9 @@ TYPED_TEST(AccuracyLayerTest, TestForwardWithSpatialAxes) {
           }
         }
         label_offset[0] = n; label_offset[1] = h; label_offset[2] = w;
-        const int correct_label =
-            static_cast<int>(this->blob_bottom_label_->data_at(label_offset));
+        const int_tp correct_label =
+            static_cast<int_tp>(this->blob_bottom_label_
+                                ->data_at(label_offset));
         if (max_id == correct_label) {
           ++num_correct_labels;
         }
@@ -172,17 +191,17 @@ TYPED_TEST(AccuracyLayerTest, TestForwardIgnoreLabel) {
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
   TypeParam max_value;
-  int max_id;
-  int num_correct_labels = 0;
-  int count = 0;
-  for (int i = 0; i < 100; ++i) {
+  int_tp max_id;
+  int_tp num_correct_labels = 0;
+  int_tp count = 0;
+  for (int_tp i = 0; i < 100; ++i) {
     if (kIgnoreLabelValue == this->blob_bottom_label_->data_at(i, 0, 0, 0)) {
       continue;
     }
     ++count;
     max_value = -FLT_MAX;
     max_id = 0;
-    for (int j = 0; j < 10; ++j) {
+    for (int_tp j = 0; j < 10; ++j) {
       if (this->blob_bottom_data_->data_at(i, j, 0, 0) > max_value) {
         max_value = this->blob_bottom_data_->data_at(i, j, 0, 0);
         max_id = j;
@@ -206,13 +225,13 @@ TYPED_TEST(AccuracyLayerTest, TestForwardCPUTopK) {
   layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
   TypeParam current_value;
-  int current_rank;
-  int num_correct_labels = 0;
-  for (int i = 0; i < 100; ++i) {
-    for (int j = 0; j < 10; ++j) {
+  int_tp current_rank;
+  int_tp num_correct_labels = 0;
+  for (int_tp i = 0; i < 100; ++i) {
+    for (int_tp j = 0; j < 10; ++j) {
       current_value = this->blob_bottom_data_->data_at(i, j, 0, 0);
       current_rank = 0;
-      for (int k = 0; k < 10; ++k) {
+      for (int_tp k = 0; k < 10; ++k) {
         if (this->blob_bottom_data_->data_at(i, k, 0, 0) > current_value) {
           ++current_rank;
         }
@@ -226,6 +245,93 @@ TYPED_TEST(AccuracyLayerTest, TestForwardCPUTopK) {
 
   EXPECT_NEAR(this->blob_top_->data_at(0, 0, 0, 0),
               num_correct_labels / 100.0, 1e-4);
+}
+
+TYPED_TEST(AccuracyLayerTest, TestForwardCPUPerClass) {
+  LayerParameter layer_param;
+  AccuracyLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_per_class_vec_);
+  layer.Forward(this->blob_bottom_vec_, this->blob_top_per_class_vec_);
+
+  TypeParam max_value;
+  int_tp max_id;
+  int_tp num_correct_labels = 0;
+  const int_tp num_class = this->blob_top_per_class_->num();
+  vector<int_tp> correct_per_class(num_class, 0);
+  vector<int_tp> num_per_class(num_class, 0);
+  for (int_tp i = 0; i < 100; ++i) {
+    max_value = -FLT_MAX;
+    max_id = 0;
+    for (int_tp j = 0; j < 10; ++j) {
+      if (this->blob_bottom_data_->data_at(i, j, 0, 0) > max_value) {
+        max_value = this->blob_bottom_data_->data_at(i, j, 0, 0);
+        max_id = j;
+      }
+    }
+    ++num_per_class[this->blob_bottom_label_->data_at(i, 0, 0, 0)];
+    if (max_id == this->blob_bottom_label_->data_at(i, 0, 0, 0)) {
+      ++num_correct_labels;
+      ++correct_per_class[max_id];
+    }
+  }
+  EXPECT_NEAR(this->blob_top_->data_at(0, 0, 0, 0),
+              num_correct_labels / 100.0, 1e-4);
+  for (int_tp i = 0; i < num_class; ++i) {
+    TypeParam accuracy_per_class = (num_per_class[i] > 0 ?
+       static_cast<TypeParam>(correct_per_class[i]) / num_per_class[i] : 0);
+    EXPECT_NEAR(this->blob_top_per_class_->data_at(i, 0, 0, 0),
+                accuracy_per_class, 1e-4);
+  }
+}
+
+
+TYPED_TEST(AccuracyLayerTest, TestForwardCPUPerClassWithIgnoreLabel) {
+  LayerParameter layer_param;
+  const TypeParam kIgnoreLabelValue = -1;
+  layer_param.mutable_accuracy_param()->set_ignore_label(kIgnoreLabelValue);
+  AccuracyLayer<TypeParam> layer(layer_param);
+  // Manually set some labels to the ignore label value (-1).
+  this->blob_bottom_label_->mutable_cpu_data()[2] = kIgnoreLabelValue;
+  this->blob_bottom_label_->mutable_cpu_data()[5] = kIgnoreLabelValue;
+  this->blob_bottom_label_->mutable_cpu_data()[32] = kIgnoreLabelValue;
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_per_class_vec_);
+  layer.Forward(this->blob_bottom_vec_, this->blob_top_per_class_vec_);
+
+  TypeParam max_value;
+  int_tp max_id;
+  int_tp num_correct_labels = 0;
+  const int_tp num_class = this->blob_top_per_class_->num();
+  vector<int_tp> correct_per_class(num_class, 0);
+  vector<int_tp> num_per_class(num_class, 0);
+  int_tp count = 0;
+  for (int_tp i = 0; i < 100; ++i) {
+    if (kIgnoreLabelValue == this->blob_bottom_label_->data_at(i, 0, 0, 0)) {
+      continue;
+    }
+    ++count;
+    max_value = -FLT_MAX;
+    max_id = 0;
+    for (int_tp j = 0; j < 10; ++j) {
+      if (this->blob_bottom_data_->data_at(i, j, 0, 0) > max_value) {
+        max_value = this->blob_bottom_data_->data_at(i, j, 0, 0);
+        max_id = j;
+      }
+    }
+    ++num_per_class[this->blob_bottom_label_->data_at(i, 0, 0, 0)];
+    if (max_id == this->blob_bottom_label_->data_at(i, 0, 0, 0)) {
+      ++num_correct_labels;
+      ++correct_per_class[max_id];
+    }
+  }
+  EXPECT_EQ(count, 97);
+  EXPECT_NEAR(this->blob_top_->data_at(0, 0, 0, 0),
+              num_correct_labels / TypeParam(count), 1e-4);
+  for (int_tp i = 0; i < 10; ++i) {
+    TypeParam accuracy_per_class = (num_per_class[i] > 0 ?
+       static_cast<TypeParam>(correct_per_class[i]) / num_per_class[i] : 0);
+    EXPECT_NEAR(this->blob_top_per_class_->data_at(i, 0, 0, 0),
+                accuracy_per_class, 1e-4);
+  }
 }
 
 }  // namespace caffe
