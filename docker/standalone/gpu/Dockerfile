@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgflags-dev \
         libgoogle-glog-dev \
         libhdf5-serial-dev \
+        libleveldb-dev \
+        liblmdb-dev \
         libprotobuf-dev \
         libsnappy-dev \
         protobuf-compiler \
@@ -27,6 +29,7 @@ RUN pip install numpy scipy pydot
 WORKDIR /usr/lib/x86_64-linux-gnu
 RUN ln -s libhdf5_serial.so.8.0.2 libhdf5.so && \
     ln -s libhdf5_serial_hl.so.8.0.2 libhdf5_hl.so
+ENV CPATH /usr/include/hdf5/serial/
 
 # download and install caffe
 WORKDIR /opt 
@@ -35,6 +38,10 @@ ENV CLONE_TAG=master
 RUN git clone -b ${CLONE_TAG} --depth 1 https://github.com/jingpengw/caffe.git
 WORKDIR $CAFFE_ROOT
 RUN pip install -r ${CAFFE_ROOT}/python/requirements.txt
+
+
+#RUN apt-get install -y --no-install-recommends libopencv-dev 
+
 RUN make -j "$(nproc)" all && \
     make -j "$(nproc)" pycaffe
 
