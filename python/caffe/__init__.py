@@ -14,12 +14,9 @@ from ._caffe import __version__
 from .proto.caffe_pb2 import TRAIN, TEST
 from .classifier import Classifier
 from .detector import Detector
-<<<<<<< HEAD
-from . import caffeio
-=======
 from . import io
 from .net_spec import layers, params, NetSpec, to_proto
 
 if _unset_glog_level:
   del os.environ['GLOG_minloglevel']
->>>>>>> 6952f404f61f73d6c05b511eb103feb641401243
+
