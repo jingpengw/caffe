@@ -5,7 +5,7 @@ from skimage.transform import resize
 
 try:
     # Python3 will most likely not be able to load protobuf
-    from caffeproto import caffe_pb2
+    from caffe.proto import caffe_pb2
 except:
     import sys
     if sys.version_info >= (3, 0):
